@@ -76,27 +76,53 @@ export class Server {
         this.io_server.on('connection', (socket) => {
             console.log('Connection received');
 
+            // Check if auth key is given
+            console.log(socket.handshake.query)
+            if(socket.handshake.query.auth) {
+                // Decode key
+                let tokenData: TokenDict = jwt.decode(socket.handshake.query.auth as string) as TokenDict;
+                // Validate key
+                try {
+                    jwt.verify(socket.handshake.query.auth as string, process.env.SECRET_KEY as string);
+
+                    // decode
+                    console.log(`Received authorized connection from ${tokenData.uid}`);
+                } catch(error) {
+                    console.log(`Received authorized connection from ${tokenData.uid}, but token is invalid`);
+                    socket.disconnect();
+                }
+            }
+
+            socket.on("message", (message) => {
+                console.log("Received message", message)
+            })
+
             socket.on("request_connection", (message: string) => {
-                console.log('Received request_connection', message);
+                console.log('Received request_connection');
     
                 // Parse JSON
                 let data = JSON.parse(message);
         
                 if(data.method != 'request_connection') return;
+
+                console.log(`Request connection from ${data.uid} received`);
     
                 // Verify authorization token to validate connection
                 try {
                     jwt.verify(data.headers.authorization, process.env.SECRET_KEY as string);
+                    console.log(`Request connection from ${data.uid} validated`);
 
                     // decode
                     let tokenData: TokenDict = jwt.decode(data.headers.authorization) as TokenDict;
     
                     // Connection verified, so set it as verified and assign a new key
-                    this.verified_connections[tokenData.uid] = {
+                    this.verified_connections[data.uid] = {
                         socket,
-                        key: jwt.sign({uid: tokenData.uid, token: data.headers.authorization}, process.env.SECRET_KEY as string),
+                        key: jwt.sign({uid: data.uid, token: data.headers.authorization}, process.env.SECRET_KEY as string),
                         token: data.headers.token
                     }
+
+                    console.log(`Request connection from ${data.uid} approved`);
     
                     socket.send(
                         JSON.stringify(
@@ -110,6 +136,7 @@ export class Server {
                         )
                     )
                 } catch(error) {
+                    console.log(`Request connection from ${data.uid} rejected`);
                     // Reject connection
                     socket.send(
                         JSON.stringify(
@@ -121,62 +148,12 @@ export class Server {
                             }
                         )
                     );
+                    console.log(error)
                 }
     
                 // Even if the connection is verified, we won't stablish it yet. We wait for client to call the 'connect' method
                 socket.disconnect();
             });
-        })
-
-        this.io_server.on('request_connection', (socket, buffer) => {
-            console.log('Received request_connection');
-
-            // Convert buffer to string
-            let message = buffer.toString();
-
-            // Parse JSON
-            let data = JSON.parse(message);
-
-            if(data.method != 'request_connection') return;
-
-            // Verify authorization token to validate connection
-            try {
-                jwt.verify(data.headers.authorization, process.env.SECRET_KEY as string);
-
-                // Connection verified, so set it as verified and assign a new key
-                this.verified_connections[data.uid] = {
-                    socket,
-                    key: jwt.sign({uid: data.uid, token: data.headers.authorization}, process.env.SECRET_KEY as string),
-                    token: data.headers.token
-                }
-
-                socket.send(
-                    JSON.stringify(
-                        {
-                            method: 'request_connection',
-                            response: 'verified',
-                            code: 200,
-                            mid: data.mid,
-                            key: this.verified_connections[data.uid].key
-                        }
-                    )
-                )
-            } catch(error) {
-                // Reject connection
-                socket.send(
-                    JSON.stringify(
-                        {
-                            method: 'request_connection',
-                            response: 'rejected',
-                            code: 400,
-                            mid: data.mid
-                        }
-                    )
-                );
-            }
-
-            // Even if the connection is verified, we won't stablish it yet. We wait for client to call the 'connect' method
-            socket.close();
         });
 
         this.http_server.listen(this.port, () => {

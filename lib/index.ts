@@ -11,7 +11,6 @@ let logs: LazyDict = {};
 
 function __wait_for_response(mid: string, tries = 0, resolves: Function[] = []) {
     return new Promise((resolve, reject) => {
-        console.log(tries);
         if(tries < 10) {
             setTimeout(async () => {
                 if(!logs[mid].replied && !logs[mid].timedout) {
@@ -23,7 +22,6 @@ function __wait_for_response(mid: string, tries = 0, resolves: Function[] = []) 
             }, 100)
         } else {
             logs[mid].timedout = true;
-            console.log(logs);
             resolve(false);
             resolves.forEach(res => res(false));
             return;
@@ -51,14 +49,15 @@ async function __wait_for_socket(socket: WebSocket, waitTime = 0) {
 function request_connection({host= 'localhost', port = 65963, headers = {}}: {host: string, port: number, headers: Object}) {
     return new Promise(async (resolve, reject) => {
         // Create a WebSocket client and stablish connection with given host
-        let client: IOClient.Socket = IOClient.io("ws://" + host + ":" + port.toString());
+        let hostUrl: string = "ws://" + host + ":" + port.toString();
+        let client: IOClient.Socket = IOClient.io(hostUrl);
         //let server: any = new WebSocket('ws://' + host + ":" + port.toString()); // Connection to server
 
         //console.log(client.readyState);
         //await __wait_for_socket(server);
         //console.log(client.readyState);
 
-        let requestedConnection = new RequestedConnection({host, uid: UID, headers});
+        let requestedConnection = new RequestedConnection({host: hostUrl, uid: UID, headers});
 
         client.on('message', (buffer: { toString: () => any; }) => {
             // Convert to string
@@ -88,7 +87,7 @@ function request_connection({host= 'localhost', port = 65963, headers = {}}: {ho
             // Specify action
             method: 'request_connection',
             // Create an unique id for this client
-            id: UID,
+            uid: UID,
             headers,
             mid: crypto.randomBytes(6).toString('hex'),
             replied: false,
@@ -103,9 +102,9 @@ function request_connection({host= 'localhost', port = 65963, headers = {}}: {ho
         client.emit("request_connection", JSON.stringify(message_data));
 
         // Wait for response
-        console.log('Waiting for response');
+        console.log('Connection requested');
         let replied = await __wait_for_response(message_data.mid);
-        console.log('Response', replied, logs);
+        console.log('Received response and request is', logs[message_data.mid].response.response);
         requestedConnection.setTimedOut(!replied);
 
         resolve(requestedConnection);

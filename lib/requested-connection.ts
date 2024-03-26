@@ -1,3 +1,6 @@
+import assert from "assert";
+import * as IOClient from "socket.io-client";
+
 export class RequestedConnection {
     private host: string;
     private headers: Object;
@@ -22,6 +25,12 @@ export class RequestedConnection {
     }
 
     connect() {
-        
+        assert(!!this.auth_key, "Authorization key required");
+
+        // Create connection
+        let connection: IOClient.Socket = IOClient.io(this.host + `?auth=${this.auth_key}`);
+
+        return connection;
+
     }
 }
