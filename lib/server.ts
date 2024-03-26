@@ -1,7 +1,7 @@
 import * as WebSocket from 'ws';
 import * as jwt from 'jsonwebtoken';
 import * as dotenv from 'dotenv';
-import {EventsDict, LazyDict, TokenDict} from "./interfaces";
+import {EventsDict, LazyDict, TokenDict, ServerArgs} from "./interfaces";
 import * as http from 'http';
 import express, {Express, Request, Response} from "express";
 import * as IOServer from 'socket.io';
@@ -15,16 +15,16 @@ export class Server {
     private io_server: IOServer.Server;
     private http_server: any;
     private host: string;
-    private port: number;
+    private port: number | string;
     private __events: EventsDict;
 
     private open_connections: LazyDict;
     private verified_connections: LazyDict;
     private server_url: string;
 
-    constructor({host = 'localhost', port = 3535}: {host: string, port: number}) {
-        this.host = host;
-        this.port = port;
+    constructor(args: ServerArgs) {
+        this.host = args.host;
+        this.port = args.port;
         this.server_url = '';
         this.__events = {};
         this.open_connections = {};
@@ -114,15 +114,16 @@ export class Server {
 
                     // decode
                     let tokenData: TokenDict = jwt.decode(data.headers.authorization) as TokenDict;
+                    console.log(tokenData);
     
                     // Connection verified, so set it as verified and assign a new key
-                    this.verified_connections[data.uid] = {
+                    this.verified_connections[tokenData.uid] = {
                         socket,
-                        key: jwt.sign({uid: data.uid, token: data.headers.authorization}, process.env.SECRET_KEY as string),
+                        key: jwt.sign({uid: tokenData.uid, token: data.headers.authorization}, process.env.SECRET_KEY as string),
                         token: data.headers.token
                     }
 
-                    console.log(`Request connection from ${data.uid} approved`);
+                    console.log(`Request connection from ${tokenData.uid} approved`);
     
                     socket.send(
                         JSON.stringify(

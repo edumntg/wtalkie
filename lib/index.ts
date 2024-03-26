@@ -2,11 +2,11 @@ import {Server} from "./server"
 import WebSocket from 'ws';
 import * as crypto from 'crypto';
 import { RequestedConnection } from "./requested-connection";
-import {EventsDict, LazyDict, TokenDict} from "./interfaces";
+import {EventsDict, LazyDict, TokenDict, RequestFunctionArgs} from "./interfaces";
 import * as IOClient from "socket.io-client";
 import * as jwt from 'jsonwebtoken';
 
-const UID = crypto.randomBytes(6).toString('hex'); // Generate an unique id for this instance
+let UID = crypto.randomBytes(6).toString('hex'); // Generate an unique id for this instance
 let logs: LazyDict = {};
 
 function __wait_for_response(mid: string, tries = 0, resolves: Function[] = []) {
@@ -46,10 +46,13 @@ async function __wait_for_socket(socket: WebSocket, waitTime = 0) {
     });
 }
 
-function request_connection({host= 'localhost', port = 65963, headers = {}}: {host: string, port: number, headers: Object}) {
+function request_connection(args: RequestFunctionArgs) {
     return new Promise(async (resolve, reject) => {
         // Create a WebSocket client and stablish connection with given host
-        let hostUrl: string = "ws://" + host + ":" + port.toString();
+        let hostUrl: string = "ws://" + args.host + ":" + args.port.toString();
+        if(args.url) {
+            hostUrl = args.url;
+        }
         let client: IOClient.Socket = IOClient.io(hostUrl);
         //let server: any = new WebSocket('ws://' + host + ":" + port.toString()); // Connection to server
 
@@ -57,7 +60,7 @@ function request_connection({host= 'localhost', port = 65963, headers = {}}: {ho
         //await __wait_for_socket(server);
         //console.log(client.readyState);
 
-        let requestedConnection = new RequestedConnection({host: hostUrl, uid: UID, headers});
+        let requestedConnection = new RequestedConnection({host: hostUrl, uid: UID, headers: args.headers});
 
         client.on('message', (buffer: { toString: () => any; }) => {
             // Convert to string
@@ -88,7 +91,7 @@ function request_connection({host= 'localhost', port = 65963, headers = {}}: {ho
             method: 'request_connection',
             // Create an unique id for this client
             uid: UID,
-            headers,
+            headers: args.headers,
             mid: crypto.randomBytes(6).toString('hex'),
             replied: false,
             response: null,
@@ -111,8 +114,13 @@ function request_connection({host= 'localhost', port = 65963, headers = {}}: {ho
     });
 }
 
+function setId(id: string) {
+    UID = id;
+}
+
 export {
     Server,
     request_connection,
-    UID
+    UID,
+    setId
 }

@@ -1,34 +1,35 @@
 import assert from "assert";
 import * as IOClient from "socket.io-client";
+import { RequestedConnectionArgs } from "./interfaces";
 
 export class RequestedConnection {
-    private host: string;
-    private headers: Object;
-    private UID: string;
-    private auth_key: string;
-    private timed_out: boolean;
+    private _host: string;
+    private _headers: Object;
+    private _UID: string;
+    private _auth_key: string;
+    private _timed_out: boolean;
 
-    constructor({host, headers, uid}: {host: string, headers: Object, uid: string}) {
-        this.host = host;
-        this.headers = headers;
-        this.UID = uid;
-        this.timed_out = false;
-        this.auth_key = '';
+    constructor(args: RequestedConnectionArgs) {
+        this._host = args.host;
+        this._headers = args.headers;
+        this._UID = args.uid;
+        this._timed_out = false;
+        this._auth_key = '';
     }
 
     authorize(key: string) {
-        this.auth_key = key;
+        this._auth_key = key;
     }
 
     setTimedOut(bool: boolean) {
-        this.timed_out = bool;
+        this._timed_out = bool;
     }
 
     connect() {
-        assert(!!this.auth_key, "Authorization key required");
+        assert(!!this._auth_key, "Authorization key required");
 
         // Create connection
-        let connection: IOClient.Socket = IOClient.io(this.host + `?auth=${this.auth_key}`);
+        let connection: IOClient.Socket = IOClient.io(this._host + `?auth=${this._auth_key}`);
 
         return connection;
 
