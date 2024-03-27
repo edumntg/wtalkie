@@ -16,7 +16,7 @@ export class Server {
     private http_server: any;
     private host: string;
     private port: number | string;
-    private __events: EventsDict;
+    private _events: EventsDict;
 
     private open_connections: LazyDict;
     private verified_connections: LazyDict;
@@ -25,20 +25,14 @@ export class Server {
     constructor(args: ServerArgs) {
         this.host = args.host;
         this.port = args.port;
-        this.server_url = '';
-        this.__events = {};
+        this.server_url = 'ws://' + this.host + ":" + this.port.toString();
+        this._events = {};
         this.open_connections = {};
         this.verified_connections = {};
         //this.express_app = express();
         this.express_app = express();
         this.http_server = http.createServer(this.express_app);
         this.io_server = new IOServer.Server(this.http_server);
-
-        this._construct_url();
-    }
-
-    private _construct_url() {
-        this.server_url = 'ws://' + this.host + ":" + this.port.toString();
     }
 
     private async __wait_for_socket(socket: WebSocket, waitTime = 0) {
@@ -63,7 +57,7 @@ export class Server {
         if(event_name === 'request_connection') return; // cannot override this event, it is reserved
 
         console.log('CALLED ON', event_name);
-        this.__events[event_name] = callback;
+        this._events[event_name] = callback;
 
         return this.socket_server?.on(event_name, (args) => callback(args));
     }
@@ -94,7 +88,9 @@ export class Server {
             }
 
             socket.on("message", (message) => {
-                console.log("Received message", message)
+                console.log("Received message", message);
+                // Send reply
+                socket.send("This is the reply");
             })
 
             socket.on("request_connection", (message: string) => {

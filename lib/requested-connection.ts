@@ -25,11 +25,13 @@ export class RequestedConnection {
         this._timed_out = bool;
     }
 
-    connect() {
+    connect({verbose = false}): IOClient.Socket {
         assert(!!this._auth_key, "Authorization key required");
 
         // Create connection
+        verbose && console.log("Connecting to", this._host);
         let connection: IOClient.Socket = IOClient.io(this._host + `?auth=${this._auth_key}`);
+        verbose && console.log("Connected!");
 
         return connection;
 

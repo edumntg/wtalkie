@@ -9,12 +9,12 @@ import * as jwt from 'jsonwebtoken';
 let UID = crypto.randomBytes(6).toString('hex'); // Generate an unique id for this instance
 let logs: LazyDict = {};
 
-function __wait_for_response(mid: string, tries = 0, resolves: Function[] = []) {
+function _waitForResponse(mid: string, tries = 0, resolves: Function[] = []) {
     return new Promise((resolve, reject) => {
         if(tries < 10) {
             setTimeout(async () => {
                 if(!logs[mid].replied && !logs[mid].timedout) {
-                    await __wait_for_response(mid, tries + 1, [...resolves, resolve]);
+                    await _waitForResponse(mid, tries + 1, [...resolves, resolve]);
                 } else {
                     resolves.forEach(res => res(!logs[mid].timedout));
                     resolve(!logs[mid].timedout);
@@ -29,12 +29,12 @@ function __wait_for_response(mid: string, tries = 0, resolves: Function[] = []) 
     })
 }
 
-async function __wait_for_socket(socket: WebSocket, waitTime = 0) {
+async function _waitForSocket(socket: WebSocket, waitTime = 0) {
     return new Promise((resolve, reject) => {
         if(waitTime < 5000) {
             setTimeout(async () => {
                 if(socket.readyState !== 1) {
-                    await __wait_for_socket(socket, waitTime + 100);
+                    await _waitForSocket(socket, waitTime + 100);
                 } else {
                     resolve(true);
                 }
@@ -46,7 +46,7 @@ async function __wait_for_socket(socket: WebSocket, waitTime = 0) {
     });
 }
 
-function request_connection(args: RequestFunctionArgs) {
+function requestConnection(args: RequestFunctionArgs) {
     return new Promise(async (resolve, reject) => {
         // Create a WebSocket client and stablish connection with given host
         let hostUrl: string = "ws://" + args.host + ":" + args.port.toString();
@@ -106,9 +106,13 @@ function request_connection(args: RequestFunctionArgs) {
 
         // Wait for response
         console.log('Connection requested');
-        let replied = await __wait_for_response(message_data.mid);
-        console.log('Received response and request is', logs[message_data.mid].response.response);
-        requestedConnection.setTimedOut(!replied);
+        let replied = await _waitForResponse(message_data.mid);
+        if(!!replied) {
+            console.log('Received response and request is', logs[message_data.mid].response.response);
+        } else {
+            console.log('Request timed out');
+        }
+        requestedConnection.setTimedOut(!replied);       
 
         resolve(requestedConnection);
     });
@@ -120,7 +124,7 @@ function setId(id: string) {
 
 export {
     Server,
-    request_connection,
+    requestConnection,
     UID,
     setId
 }
