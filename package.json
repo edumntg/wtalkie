@@ -1,0 +1,47 @@
+{
+  "name": "wtalkie",
+  "version": "1.0.0",
+  "description": "A simple communication channel between APIs and Backend",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "tsc & node test/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edumntg/wtalkie.git"
+  },
+  "keywords": [
+    "API",
+    "websocket",
+    "io",
+    "socket",
+    "communication",
+    "channel",
+    "http",
+    "server",
+    "client"
+  ],
+  "author": "Eduardo Montilva",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/edumntg/wtalkie/issues"
+  },
+  "homepage": "https://github.com/edumntg/wtalkie#readme",
+  "dependencies": {
+    "@types/node": "^20.11.30",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "nodemon": "^3.1.0",
+    "socket.io": "^4.7.5",
+    "socket.io-client": "^4.7.5",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/ws": "^8.5.10"
+  }
+}
