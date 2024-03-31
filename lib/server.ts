@@ -61,7 +61,7 @@ export class Server {
         return this.socket_server?.on(event_name, (args) => callback(args));
     }
 
-    async start() {
+    start() {
 
         //this.socket_server = new WebSocket.Server({port: this.port});
         //this.socket_server = socketio(this.http_server);
