@@ -29,7 +29,6 @@ export class Server {
         this._events = {};
         this.open_connections = {};
         this.verified_connections = {};
-        //this.express_app = express();
         this.express_app = express();
         this.http_server = http.createServer(this.express_app);
         this.io_server = new IOServer.Server(this.http_server);
@@ -120,7 +119,7 @@ export class Server {
                     }
 
                     console.log(`Request connection from ${tokenData.uid} approved`);
-    
+                    
                     socket.send(
                         JSON.stringify(
                             {
@@ -132,7 +131,7 @@ export class Server {
                             }
                         )
                     )
-                } catch(error) {
+                } catch(error: any) {
                     console.log(`Request connection from ${data.uid} rejected`);
                     // Reject connection
                     socket.send(
@@ -140,12 +139,13 @@ export class Server {
                             {
                                 method: 'request_connection',
                                 response: 'rejected',
+                                reason: error.name + ": " + error.message,
                                 code: 400,
                                 mid: data.mid
                             }
                         )
                     );
-                    console.log(error)
+                    //console.log(error)
                 }
     
                 // Even if the connection is verified, we won't stablish it yet. We wait for client to call the 'connect' method

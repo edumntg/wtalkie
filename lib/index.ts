@@ -1,10 +1,8 @@
 import {Server} from "./server"
+import {Client} from "./client"
 import WebSocket from 'ws';
 import * as crypto from 'crypto';
-import { RequestedConnection } from "./requested-connection";
-import {EventsDict, LazyDict, TokenDict, RequestFunctionArgs} from "./interfaces";
-import * as IOClient from "socket.io-client";
-import * as jwt from 'jsonwebtoken';
+import {LazyDict} from "./interfaces";
 
 let UID = crypto.randomBytes(6).toString('hex'); // Generate an unique id for this instance
 let logs: LazyDict = {};
@@ -46,85 +44,13 @@ async function _waitForSocket(socket: WebSocket, waitTime = 0) {
     });
 }
 
-function requestConnection(args: RequestFunctionArgs) {
-    return new Promise(async (resolve, reject) => {
-        // Create a WebSocket client and stablish connection with given host
-        let hostUrl: string = "ws://" + args.host + ":" + args.port.toString();
-        if(args.url) {
-            hostUrl = args.url;
-        }
-        let client: IOClient.Socket = IOClient.io(hostUrl);
-        //let server: any = new WebSocket('ws://' + host + ":" + port.toString()); // Connection to server
-
-        //console.log(client.readyState);
-        //await __wait_for_socket(server);
-        //console.log(client.readyState);
-
-        let requestedConnection = new RequestedConnection({host: hostUrl, uid: UID, headers: args.headers});
-
-        client.on('message', (buffer: { toString: () => any; }) => {
-            // Convert to string
-            let message = buffer.toString();
-
-            // Parse data
-            let data = JSON.parse(message);
-            if(data.mid in logs) {
-                logs[data.mid].replied = true;
-                logs[data.mid].response = data;
-            }
-
-            switch(data.method) {
-                case 'request_connection':
-                    // If request is successful, return a new RequestedConnection object
-                    if(data.code === 200) {
-                        requestedConnection.authorize(data.key);
-                    } else {
-                        resolve(false);
-                    }
-                    break;
-            }
-        });
-
-        // Create a message object
-        let message_data = {
-            // Specify action
-            method: 'request_connection',
-            // Create an unique id for this client
-            uid: UID,
-            headers: args.headers,
-            mid: crypto.randomBytes(6).toString('hex'),
-            replied: false,
-            response: null,
-            timedout: false
-        };
-
-        logs[message_data.mid] = message_data;
-
-        // Now, send the headers
-        console.log('Emitting');
-        client.emit("request_connection", JSON.stringify(message_data));
-
-        // Wait for response
-        console.log('Connection requested');
-        let replied = await _waitForResponse(message_data.mid);
-        if(!!replied) {
-            console.log('Received response and request is', logs[message_data.mid].response.response);
-        } else {
-            console.log('Request timed out');
-        }
-        requestedConnection.setTimedOut(!replied);       
-
-        resolve(requestedConnection);
-    });
-}
-
 function setId(id: string) {
     UID = id;
 }
 
 export {
     Server,
-    requestConnection,
+    Client,
     UID,
     setId
 }

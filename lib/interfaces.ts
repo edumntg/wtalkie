@@ -22,11 +22,19 @@ type ServerArgs = {
     port: string | number;
 }
 
-type RequestedConnectionArgs = {
+type ClientArgs = {
     host: string;
-    headers: Object;
+    port: string | number;
+    authorization?: string;
+    serverUrl?: string;
+}
+
+interface MessagesDict {
+    [key: string]: Object
+}
+
+type AuthToken = {
     uid: string;
-    url?: string;
 }
 
 export {
@@ -35,5 +43,6 @@ export {
     TokenDict,
     RequestFunctionArgs,
     ServerArgs,
-    RequestedConnectionArgs
+    ClientArgs,
+    AuthToken
 }
