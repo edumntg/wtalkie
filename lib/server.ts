@@ -1,9 +1,10 @@
 import * as WebSocket from 'ws';
 import * as jwt from 'jsonwebtoken';
 import * as dotenv from 'dotenv';
-import {EventsDict, LazyDict, TokenDict, ServerArgs} from "./interfaces";
+import {EventsDict, LazyDict, TokenDict} from './interfaces';
+import {ServerArgs} from './types';
 import * as http from 'http';
-import express, {Express, Request, Response} from "express";
+import express, {Express} from 'express';
 import * as IOServer from 'socket.io';
 
 dotenv.config();
@@ -20,12 +21,10 @@ export class Server {
 
     private open_connections: LazyDict;
     private verified_connections: LazyDict;
-    private server_url: string;
 
     constructor(args: ServerArgs) {
         this.host = args.host;
         this.port = args.port;
-        this.server_url = 'ws://' + this.host + ":" + this.port.toString();
         this._events = {};
         this.open_connections = {};
         this.verified_connections = {};

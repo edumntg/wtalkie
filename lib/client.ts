@@ -1,8 +1,9 @@
-import {ClientArgs, EventsDict, LazyDict, AuthToken} from "./interfaces"
-import * as IOClient from "socket.io-client";
+import {EventsDict, LazyDict} from './interfaces';
+import {ClientArgs, AuthToken} from './types';
+import * as IOClient from 'socket.io-client';
 import * as crypto from 'crypto';
-import assert from "assert";
-import * as jwt from "jsonwebtoken";
+import assert from 'assert';
+import * as jwt from 'jsonwebtoken';
 
 export class Client {
     private args: ClientArgs;
