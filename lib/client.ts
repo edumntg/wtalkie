@@ -4,6 +4,7 @@ import * as IOClient from 'socket.io-client';
 import * as crypto from 'crypto';
 import assert from 'assert';
 import * as jwt from 'jsonwebtoken';
+import { EVENT_MESSAGE, EVENT_REQUEST_CONNECTION } from './constants';
 
 export class Client {
     private args: ClientArgs;
@@ -44,7 +45,7 @@ export class Client {
             }
             let client: IOClient.Socket = IOClient.io(hostUrl);
     
-            client.on('message', (buffer: { toString: () => any; }) => {
+            client.on(EVENT_MESSAGE, (buffer: { toString: () => any; }) => {
                 // Convert to string
                 let message = buffer.toString();
     
@@ -55,7 +56,7 @@ export class Client {
                 }
     
                 switch(data.method) {
-                    case 'request_connection':
+                    case EVENT_REQUEST_CONNECTION:
                         if(data.code === 200) {
                             this.authorize(data.key);
                         } else {
@@ -68,7 +69,7 @@ export class Client {
             // Create a message object
             let message_data = {
                 // Specify action
-                method: 'request_connection',
+                method: EVENT_REQUEST_CONNECTION,
                 // Create an unique id for this client
                 uid: this.UID,
                 headers: {authorization: this.authorization},
@@ -82,7 +83,7 @@ export class Client {
     
             // Now, send the headers
             console.log('Emitting');
-            client.emit("request_connection", JSON.stringify(message_data));
+            client.emit(EVENT_REQUEST_CONNECTION, JSON.stringify(message_data));
     
             // Wait for response
             console.log('Connection requested');
@@ -134,7 +135,7 @@ export class Client {
     on(event_name: string, callback: Function) {
         
         assert(!!this.socket, "Socket object is undefined");
-        if(event_name === 'request_connection') return; // cannot override this event, it is reserved
+        if(event_name === EVENT_REQUEST_CONNECTION) return; // cannot override this event, it is reserved
 
         console.log('CALLED ON', event_name);
         this._events[event_name] = callback;

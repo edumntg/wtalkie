@@ -5,6 +5,11 @@ type ClientArgs = {
     serverUrl?: string;
 }
 
+type ServerArgs = {
+    host: string;
+    port: string | number;
+}
+
 type AuthToken = {
     uid: string;
 }
@@ -14,11 +19,6 @@ type RequestFunctionArgs = {
     port: string | number;
     headers: Object;
     url?: string;
-}
-
-type ServerArgs = {
-    host: string;
-    port: string | number;
 }
 
 export {

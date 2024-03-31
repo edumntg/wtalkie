@@ -6,11 +6,11 @@ import {ServerArgs} from './types';
 import * as http from 'http';
 import express, {Express} from 'express';
 import * as IOServer from 'socket.io';
+import { EVENT_CONNECTION, EVENT_MESSAGE, EVENT_REQUEST_CONNECTION } from './constants';
 
 dotenv.config();
 
 export class Server {
-    //private express_app: Express;
     private express_app: Express;
     private socket_server: WebSocket.Server | undefined;
     private io_server: IOServer.Server;
@@ -51,25 +51,18 @@ export class Server {
     }
 
     on(event_name: string, callback: Function) {
+        if(event_name === EVENT_REQUEST_CONNECTION) return; // cannot override this event, it is reserved
 
-        if(event_name === 'request_connection') return; // cannot override this event, it is reserved
-
-        console.log('CALLED ON', event_name);
         this._events[event_name] = callback;
 
         return this.socket_server?.on(event_name, (args) => callback(args));
     }
 
     start() {
-
-        //this.socket_server = new WebSocket.Server({port: this.port});
-        //this.socket_server = socketio(this.http_server);
-
-        this.io_server.on('connection', (socket) => {
+        this.io_server.on(EVENT_CONNECTION, (socket) => {
             console.log('Connection received');
 
             // Check if auth key is given
-            console.log(socket.handshake.query)
             if(socket.handshake.query.auth) {
                 // Decode key
                 let tokenData: TokenDict = jwt.decode(socket.handshake.query.auth as string) as TokenDict;
@@ -85,19 +78,19 @@ export class Server {
                 }
             }
 
-            socket.on("message", (message) => {
+            socket.on(EVENT_MESSAGE, (message) => {
                 console.log("Received message", message);
                 // Send reply
                 socket.send("This is the reply");
             })
 
-            socket.on("request_connection", (message: string) => {
-                console.log('Received request_connection');
+            socket.on(EVENT_REQUEST_CONNECTION, (message: string) => {
+                console.log(`Received ${EVENT_REQUEST_CONNECTION}`);
     
                 // Parse JSON
                 let data = JSON.parse(message);
         
-                if(data.method != 'request_connection') return;
+                if(data.method != EVENT_REQUEST_CONNECTION) return;
 
                 console.log(`Request connection from ${data.uid} received`);
     
@@ -122,7 +115,7 @@ export class Server {
                     socket.send(
                         JSON.stringify(
                             {
-                                method: 'request_connection',
+                                method: EVENT_REQUEST_CONNECTION,
                                 response: 'verified',
                                 code: 200,
                                 mid: data.mid,
@@ -136,7 +129,7 @@ export class Server {
                     socket.send(
                         JSON.stringify(
                             {
-                                method: 'request_connection',
+                                method: EVENT_REQUEST_CONNECTION,
                                 response: 'rejected',
                                 reason: error.name + ": " + error.message,
                                 code: 400,
@@ -144,7 +137,6 @@ export class Server {
                             }
                         )
                     );
-                    //console.log(error)
                 }
     
                 // Even if the connection is verified, we won't stablish it yet. We wait for client to call the 'connect' method
