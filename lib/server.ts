@@ -5,35 +5,41 @@ import {EventsDict, LazyDict, TokenDict} from './interfaces';
 import {ServerArgs} from './types';
 import * as http from 'http';
 import express, {Express} from 'express';
-import * as IOServer from 'socket.io';
+import * as ServerIO from 'socket.io';
 import { EVENT_CONNECTION, EVENT_MESSAGE, EVENT_REQUEST_CONNECTION } from './constants';
+import assert from 'assert';
 
 dotenv.config();
 
 export class Server {
-    private express_app: Express;
-    private socket_server: WebSocket.Server | undefined;
-    private io_server: IOServer.Server;
-    private http_server: any;
+    private expressApp: Express;
+    private serverSocket: ServerIO.Server;
+    private httpServer: any;
     private host: string;
     private port: number | string;
     private _events: EventsDict;
+    private _serverEvents: EventsDict;
+    private _clientEvents: EventsDict;
 
-    private open_connections: LazyDict;
-    private verified_connections: LazyDict;
+    private pendingConnections: LazyDict;
+    private openConnections: LazyDict;
+    private verifiedConnections: LazyDict;
 
     constructor(args: ServerArgs) {
         this.host = args.host;
         this.port = args.port;
         this._events = {};
-        this.open_connections = {};
-        this.verified_connections = {};
-        this.express_app = express();
-        this.http_server = http.createServer(this.express_app);
-        this.io_server = new IOServer.Server(this.http_server);
+        this._serverEvents = {};
+        this._clientEvents = {};
+        this.openConnections = {};
+        this.verifiedConnections = {};
+        this.pendingConnections = {};
+        this.expressApp = express();
+        this.httpServer = http.createServer(this.expressApp);
+        this.serverSocket = new ServerIO.Server(this.httpServer);
     }
 
-    private async __wait_for_socket(socket: WebSocket, waitTime = 0) {
+    private async __wait_for_socket(socket: WebSocket, waitTime = 0): Promise<boolean> {
         return new Promise((resolve, reject) => {
             if(waitTime < 5000) {
                 setTimeout(async () => {
@@ -50,45 +56,65 @@ export class Server {
         });
     }
 
-    on(event_name: string, callback: Function) {
-        if(event_name === EVENT_REQUEST_CONNECTION) return; // cannot override this event, it is reserved
+    /*on(event_name: string, callback: Function): void {
+        //if(event_name === EVENT_REQUEST_CONNECTION) return; // cannot override this event, it is reserved
 
         this._events[event_name] = callback;
 
-        return this.socket_server?.on(event_name, (args) => callback(args));
-    }
+        //this.serverSocket?.on(event_name, (args) => callback(args));
+    }*/
 
-    start() {
-        this.io_server.on(EVENT_CONNECTION, (socket) => {
-            console.log('Connection received');
+    start(): void {
+        this.serverSocket.on(EVENT_CONNECTION, (socket) => {
+            console.log('Connection received from', socket.handshake.address);
 
             // Check if auth key is given
             if(socket.handshake.query.auth) {
+                let authKey: string | string[] = socket.handshake.query.auth;
                 // Decode key
-                let tokenData: TokenDict = jwt.decode(socket.handshake.query.auth as string) as TokenDict;
+                let tokenData: TokenDict = jwt.decode(authKey as string) as TokenDict;
                 // Validate key
                 try {
-                    jwt.verify(socket.handshake.query.auth as string, process.env.SECRET_KEY as string);
+                    jwt.verify(authKey as string, process.env.SECRET_KEY as string);
+
+                    // The given key is valid, so this client comes from an approved request. It means that, its data should be stored
+                    // in the pendingConnections map. 
+
+                    if(this.pendingConnections[tokenData.uid]) {
+                        assert(authKey === this.pendingConnections[tokenData.uid].key, "Auth key provided by server differs from the one provided by client. Aborting connection");
+                        
+                        // Move socket data from pending-connections to open-connections
+                        this.openConnections[tokenData.uid] = {
+                            uid: tokenData.uid,
+                            socket,
+                            address: socket.handshake.address,
+                            handshake: socket.handshake,
+                            key: authKey,
+                            iat: new Date().getTime()
+                        }
+
+                        // Delete previous data from pendingConnections
+                        delete this.pendingConnections[tokenData.uid];
+                    }
 
                     // decode
-                    console.log(`Received authorized connection from ${tokenData.uid}`);
+                    console.log(`Authorized connection with ${socket.handshake.address} from client ${tokenData.uid}`);
                 } catch(error) {
-                    console.log(`Received authorized connection from ${tokenData.uid}, but token is invalid`);
+                    console.log(`Reject authorized connection with ${socket.handshake.address} from client ${tokenData.uid} because jwt token is invalid`);
                     socket.disconnect();
                 }
             }
 
-            socket.on(EVENT_MESSAGE, (message) => {
-                console.log("Received message", message);
-                // Send reply
-                socket.send("This is the reply");
-            })
+            // Now, if there is a custom event registered by user, execute it
+            if(this._serverEvents[EVENT_CONNECTION]) {
+                this._serverEvents[EVENT_CONNECTION](socket);
+            }
 
             socket.on(EVENT_REQUEST_CONNECTION, (message: string) => {
                 console.log(`Received ${EVENT_REQUEST_CONNECTION}`);
     
                 // Parse JSON
-                let data = JSON.parse(message);
+                let data: LazyDict = JSON.parse(message);
         
                 if(data.method != EVENT_REQUEST_CONNECTION) return;
 
@@ -102,15 +128,17 @@ export class Server {
                     // decode
                     let tokenData: TokenDict = jwt.decode(data.headers.authorization) as TokenDict;
                     console.log(tokenData);
+
+                    // At this point, the identity of the client has been validated, so add its socket to the pendingConnections map
     
-                    // Connection verified, so set it as verified and assign a new key
-                    this.verified_connections[tokenData.uid] = {
+                    // Connection verified, so add to pending connections and assign a key
+                    this.pendingConnections[tokenData.uid] = {
                         socket,
                         key: jwt.sign({uid: tokenData.uid, token: data.headers.authorization}, process.env.SECRET_KEY as string),
                         token: data.headers.token
                     }
 
-                    console.log(`Request connection from ${tokenData.uid} approved`);
+                    console.log(`Request connection from ${tokenData.uid} approved and remains pending`);
                     
                     socket.send(
                         JSON.stringify(
@@ -119,7 +147,7 @@ export class Server {
                                 response: 'verified',
                                 code: 200,
                                 mid: data.mid,
-                                key: this.verified_connections[data.uid].key
+                                key: this.pendingConnections[data.uid].key
                             }
                         )
                     )
@@ -141,20 +169,53 @@ export class Server {
     
                 // Even if the connection is verified, we won't stablish it yet. We wait for client to call the 'connect' method
                 socket.disconnect();
+
+                // Call custom event if exits
+                if(this._clientEvents[EVENT_REQUEST_CONNECTION]) {
+                    this._clientEvents[EVENT_REQUEST_CONNECTION](message);
+                }
+            });
+
+            socket.on(EVENT_MESSAGE, (message: string) => {
+                if(this._clientEvents[EVENT_MESSAGE]) {
+                    this._clientEvents[EVENT_MESSAGE](message);
+                }
             });
         });
 
-        this.http_server.listen(this.port, () => {
+        this.httpServer.listen(this.port, () => {
             console.log(`Listening on port ${this.port}`);
         })
 
     }
 
-    close() {
-        for(let uid of Object.keys(this.open_connections)) {
-            this.open_connections[uid].close();
+    close(): void {
+        for(let uid of Object.keys(this.openConnections)) {
+            this.openConnections[uid].close();
         }
 
-        this.socket_server?.close();
+        this.serverSocket?.close();
+    }
+
+    broadcast(message: string): number {
+        // Send message to all open connections
+        let counter: number = 0;
+        for(let uid in Object.keys(this.openConnections)) {
+            let socket: ServerIO.Socket = this.openConnections[uid].socket;
+            if(socket.connected) {
+                socket.send(message);
+                counter += 1;
+            }
+        }
+
+        return counter;
+    }
+
+    registerServerEvent(eventName: string, callback: Function) {
+        this._serverEvents[eventName] = callback;
+    }
+
+    registerClientEvent(eventName: string, callback: Function) {
+        this._clientEvents[eventName] = callback;
     }
 }

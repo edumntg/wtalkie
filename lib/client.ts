@@ -39,18 +39,22 @@ export class Client {
     requestConnection() {
         return new Promise(async (resolve, reject) => {
             // Create a WebSocket client and stablish connection with given host
+
+            // Construct a ws host url, but if serverUrl is given, then use that one
             let hostUrl: string = "ws://" + this.host + ":" + this.port.toString();
             if(this.serverUrl) {
                 hostUrl = this.serverUrl;
             }
+
+            // Create connection
             let client: IOClient.Socket = IOClient.io(hostUrl);
     
             client.on(EVENT_MESSAGE, (buffer: { toString: () => any; }) => {
                 // Convert to string
-                let message = buffer.toString();
+                let message: string = buffer.toString();
     
                 // Parse data
-                let data = JSON.parse(message);
+                let data: LazyDict = JSON.parse(message);
                 if(data.mid in this.messagesReceived) {
                     this.messagesReceived[data.mid] = {...this.messagesReceived[data.mid], replied: true, response: data};
                 }
@@ -67,7 +71,7 @@ export class Client {
             });
     
             // Create a message object
-            let message_data = {
+            let message_data: LazyDict = {
                 // Specify action
                 method: EVENT_REQUEST_CONNECTION,
                 // Create an unique id for this client
@@ -145,5 +149,21 @@ export class Client {
 
     send(data: string) {
         this.socket?.send({method: "message", data});
+    }
+
+    close() {
+        this.socket?.disconnect();
+    }
+
+    disconnect() {
+        return this.close();
+    }
+
+    kill() {
+        return this.close();
+    }
+
+    registerEvent(eventName: string, callback: Function) {
+        this._events[eventName] = callback;
     }
 }
