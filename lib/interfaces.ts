@@ -1,5 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 interface EventsDict {
-    [key: string]: Function
+    [key: string]: (...args: unknown[]) => void
 }
 
 interface LazyDict {
@@ -11,7 +12,7 @@ interface TokenDict {
 }
 
 interface MessagesDict {
-    [key: string]: Object
+    [key: string]: object
 }
 
 export {

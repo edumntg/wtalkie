@@ -17,7 +17,7 @@ type AuthToken = {
 type RequestFunctionArgs = {
     host: string;
     port: string | number;
-    headers: Object;
+    headers: object;
     url?: string;
 }
 

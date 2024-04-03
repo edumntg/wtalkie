@@ -1,3 +1,4 @@
+/* eslint-disable no-async-promise-executor */
 import {EventsDict, LazyDict} from './interfaces';
 import {ClientArgs, AuthToken} from './types';
 import * as IOClient from 'socket.io-client';
@@ -47,14 +48,14 @@ export class Client {
             }
 
             // Create connection
-            let client: IOClient.Socket = IOClient.io(hostUrl);
+            const client: IOClient.Socket = IOClient.io(hostUrl);
     
-            client.on(EVENT_MESSAGE, (buffer: { toString: () => any; }) => {
+            client.on(EVENT_MESSAGE, (buffer: { toString: () => string; }) => {
                 // Convert to string
-                let message: string = buffer.toString();
+                const message: string = buffer.toString();
     
                 // Parse data
-                let data: LazyDict = JSON.parse(message);
+                const data: LazyDict = JSON.parse(message);
                 if(data.mid in this.messagesReceived) {
                     this.messagesReceived[data.mid] = {...this.messagesReceived[data.mid], replied: true, response: data};
                 }
@@ -71,7 +72,7 @@ export class Client {
             });
     
             // Create a message object
-            let message_data: LazyDict = {
+            const message_data: LazyDict = {
                 // Specify action
                 method: EVENT_REQUEST_CONNECTION,
                 // Create an unique id for this client
@@ -91,9 +92,9 @@ export class Client {
     
             // Wait for response
             console.log('Connection requested');
-            let replied = await this._waitForResponse(message_data.mid);
+            const replied: boolean = await this._waitForResponse(message_data.mid);
             let timedOut = false;
-            if(!!replied) {
+            if(replied) {
                 console.log('Received response and request is', this.messagesReceived[message_data.mid].response.response);
             } else {
                 console.log('Request timed out');
@@ -108,35 +109,44 @@ export class Client {
         assert(!!this.authorizedToken, "Authorization key required");
 
         // Create connection
-        let url = this.serverUrl || "ws://" + this.host + ":" + this.port.toString();
+        const url = this.serverUrl || "ws://" + this.host + ":" + this.port.toString();
         verbose && console.log("Connecting to", url);
-        let connection: IOClient.Socket = await IOClient.io(url + `?auth=${this.authorizedToken}`);
+        const connection: IOClient.Socket = await IOClient.io(url + `?auth=${this.authorizedToken}`);
         verbose && console.log("Connected!");
         this.socket = connection;
+
+        // Register message event
+        this.socket.on("message", (message) => {
+            if(this._events[EVENT_MESSAGE]) {
+                this._events[EVENT_MESSAGE](message);
+            }
+        });
+
+
         return connection;
     }
 
-    _waitForResponse(mid: string, tries = 0, resolves: Function[] = []) {
-        return new Promise((resolve, reject) => {
+    _waitForResponse(mid: string, tries = 0, resolves: ((param: boolean) => unknown)[] = []): Promise<boolean> {
+        return new Promise((resolve) => {
             if(tries < 10) {
                 setTimeout(async () => {
                     if(!this.messagesReceived[mid].replied && !this.messagesReceived[mid].timedout) {
                         await this._waitForResponse(mid, tries + 1, [...resolves, resolve]);
                     } else {
-                        resolves.forEach(res => res(!this.messagesReceived[mid].timedout));
+                        resolves.forEach((res: (param: boolean) => void) => res(!this.messagesReceived[mid].timedout));
                         resolve(!this.messagesReceived[mid].timedout);
                     }
                 }, 100)
             } else {
                 this.messagesReceived[mid].timedout = true;
                 resolve(false);
-                resolves.forEach(res => res(false));
+                resolves.forEach((res: (param: boolean) => void) => res(false));
                 return;
             }
         })
     }
 
-    on(event_name: string, callback: Function) {
+    /*on(event_name: string, callback: Function) {
         
         assert(!!this.socket, "Socket object is undefined");
         if(event_name === EVENT_REQUEST_CONNECTION) return; // cannot override this event, it is reserved
@@ -145,10 +155,10 @@ export class Client {
         this._events[event_name] = callback;
 
         return this.socket?.on(event_name, (args) => callback(args));
-    }
+    }*/
 
     send(data: string) {
-        this.socket?.send({method: "message", data});
+        this.socket?.send(data);
     }
 
     close() {
@@ -163,7 +173,7 @@ export class Client {
         return this.close();
     }
 
-    registerEvent(eventName: string, callback: Function) {
+    registerEvent(eventName: string, callback: (() => void)) {
         this._events[eventName] = callback;
     }
 }

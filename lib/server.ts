@@ -14,7 +14,7 @@ dotenv.config();
 export class Server {
     private expressApp: Express;
     private serverSocket: ServerIO.Server;
-    private httpServer: any;
+    private httpServer: http.Server;
     private host: string;
     private port: number | string;
     private _events: EventsDict;
@@ -23,7 +23,6 @@ export class Server {
 
     private pendingConnections: LazyDict;
     private openConnections: LazyDict;
-    private verifiedConnections: LazyDict;
 
     constructor(args: ServerArgs) {
         this.host = args.host;
@@ -32,7 +31,6 @@ export class Server {
         this._serverEvents = {};
         this._clientEvents = {};
         this.openConnections = {};
-        this.verifiedConnections = {};
         this.pendingConnections = {};
         this.expressApp = express();
         this.httpServer = http.createServer(this.expressApp);
@@ -40,7 +38,7 @@ export class Server {
     }
 
     private async __wait_for_socket(socket: WebSocket, waitTime = 0): Promise<boolean> {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             if(waitTime < 5000) {
                 setTimeout(async () => {
                     if(socket.readyState !== 1) {
@@ -54,15 +52,8 @@ export class Server {
                 return;
             }
         });
+    
     }
-
-    /*on(event_name: string, callback: Function): void {
-        //if(event_name === EVENT_REQUEST_CONNECTION) return; // cannot override this event, it is reserved
-
-        this._events[event_name] = callback;
-
-        //this.serverSocket?.on(event_name, (args) => callback(args));
-    }*/
 
     start(): void {
         this.serverSocket.on(EVENT_CONNECTION, (socket) => {
@@ -70,9 +61,9 @@ export class Server {
 
             // Check if auth key is given
             if(socket.handshake.query.auth) {
-                let authKey: string | string[] = socket.handshake.query.auth;
+                const authKey: string | string[] = socket.handshake.query.auth;
                 // Decode key
-                let tokenData: TokenDict = jwt.decode(authKey as string) as TokenDict;
+                const tokenData: TokenDict = jwt.decode(authKey as string) as TokenDict;
                 // Validate key
                 try {
                     jwt.verify(authKey as string, process.env.SECRET_KEY as string);
@@ -114,58 +105,61 @@ export class Server {
                 console.log(`Received ${EVENT_REQUEST_CONNECTION}`);
     
                 // Parse JSON
-                let data: LazyDict = JSON.parse(message);
+                const data: LazyDict = JSON.parse(message);
         
                 if(data.method != EVENT_REQUEST_CONNECTION) return;
 
                 console.log(`Request connection from ${data.uid} received`);
     
                 // Verify authorization token to validate connection
-                try {
-                    jwt.verify(data.headers.authorization, process.env.SECRET_KEY as string);
-                    console.log(`Request connection from ${data.uid} validated`);
 
-                    // decode
-                    let tokenData: TokenDict = jwt.decode(data.headers.authorization) as TokenDict;
-                    console.log(tokenData);
-
-                    // At this point, the identity of the client has been validated, so add its socket to the pendingConnections map
-    
-                    // Connection verified, so add to pending connections and assign a key
-                    this.pendingConnections[tokenData.uid] = {
-                        socket,
-                        key: jwt.sign({uid: tokenData.uid, token: data.headers.authorization}, process.env.SECRET_KEY as string),
-                        token: data.headers.token
-                    }
-
-                    console.log(`Request connection from ${tokenData.uid} approved and remains pending`);
-                    
-                    socket.send(
-                        JSON.stringify(
-                            {
-                                method: EVENT_REQUEST_CONNECTION,
-                                response: 'verified',
-                                code: 200,
-                                mid: data.mid,
-                                key: this.pendingConnections[data.uid].key
-                            }
-                        )
-                    )
-                } catch(error: any) {
-                    console.log(`Request connection from ${data.uid} rejected`);
-                    // Reject connection
+                const authorized: LazyDict = this.onAuthorizeRequest(data);
+                console.log(authorized)
+                if(!authorized.success) {
                     socket.send(
                         JSON.stringify(
                             {
                                 method: EVENT_REQUEST_CONNECTION,
                                 response: 'rejected',
-                                reason: error.name + ": " + error.message,
+                                reason: authorized.reason,
                                 code: 400,
                                 mid: data.mid
                             }
                         )
                     );
+
+                    socket.disconnect();
+                    return;
                 }
+
+                // Request is authorized
+                console.log(`Request connection from ${data.uid} validated`);
+
+                // decode
+                const tokenData: TokenDict = jwt.decode(data.headers.authorization) as TokenDict;
+                console.log(tokenData);
+
+                // At this point, the identity of the client has been validated, so add its socket to the pendingConnections map
+                // Connection verified, so add to pending connections and assign a key
+                this.pendingConnections[tokenData.uid] = {
+                    socket,
+                    key: jwt.sign({uid: tokenData.uid, token: data.headers.authorization}, process.env.SECRET_KEY as string),
+                    token: data.headers.token
+                }
+
+                console.log(`Request connection from ${tokenData.uid} approved and remains pending`);
+                
+                socket.send(
+                    JSON.stringify(
+                        {
+                            method: EVENT_REQUEST_CONNECTION,
+                            response: 'verified',
+                            code: 200,
+                            mid: data.mid,
+                            key: this.pendingConnections[data.uid].key
+                        }
+                    )
+                );
     
                 // Even if the connection is verified, we won't stablish it yet. We wait for client to call the 'connect' method
                 socket.disconnect();
@@ -178,7 +172,7 @@ export class Server {
 
             socket.on(EVENT_MESSAGE, (message: string) => {
                 if(this._clientEvents[EVENT_MESSAGE]) {
-                    this._clientEvents[EVENT_MESSAGE](message);
+                    this._clientEvents[EVENT_MESSAGE](socket, message);
                 }
             });
         });
@@ -190,7 +184,7 @@ export class Server {
     }
 
     close(): void {
-        for(let uid of Object.keys(this.openConnections)) {
+        for(const uid of Object.keys(this.openConnections)) {
             this.openConnections[uid].close();
         }
 
@@ -200,8 +194,8 @@ export class Server {
     broadcast(message: string): number {
         // Send message to all open connections
         let counter: number = 0;
-        for(let uid in Object.keys(this.openConnections)) {
-            let socket: ServerIO.Socket = this.openConnections[uid].socket;
+        for(const uid in Object.keys(this.openConnections)) {
+            const socket: ServerIO.Socket = this.openConnections[uid].socket;
             if(socket.connected) {
                 socket.send(message);
                 counter += 1;
@@ -211,11 +205,24 @@ export class Server {
         return counter;
     }
 
-    registerServerEvent(eventName: string, callback: Function) {
+    registerServerEvent(eventName: string, callback: () => unknown) {
         this._serverEvents[eventName] = callback;
     }
 
-    registerClientEvent(eventName: string, callback: Function) {
+    registerClientEvent(eventName: string, callback: () => unknown) {
         this._clientEvents[eventName] = callback;
+    }
+
+    onAuthorizeRequest(data: LazyDict) {
+        // Default onAuthorize event will receive a JWT token from data, in a property called 'authorization'.
+        // The token will be verified using a secret key stored in .env as SECRET_KEY
+        // The function returns true/false
+        try {
+            jwt.verify(data.headers.authorization, process.env.SECRET_KEY as string);
+            return {success: true};
+        } catch(error: unknown) {
+            console.log(error);
+            return {success: false, reason: error};
+        }
     }
 }
