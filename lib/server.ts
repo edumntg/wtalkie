@@ -194,7 +194,7 @@ export class Server {
     broadcast(message: string): number {
         // Send message to all open connections
         let counter: number = 0;
-        for(const uid in Object.keys(this.openConnections)) {
+        for(const uid of Object.keys(this.openConnections)) {
             const socket: ServerIO.Socket = this.openConnections[uid].socket;
             if(socket.connected) {
                 socket.send(message);
