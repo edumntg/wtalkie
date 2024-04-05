@@ -8,6 +8,7 @@ type ClientArgs = {
 type ServerArgs = {
     host: string;
     port: string | number;
+    connectionWaitTime?: number;
 }
 
 type AuthToken = {

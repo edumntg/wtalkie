@@ -5,7 +5,7 @@ import * as IOClient from 'socket.io-client';
 import * as crypto from 'crypto';
 import assert from 'assert';
 import * as jwt from 'jsonwebtoken';
-import { EVENT_MESSAGE, EVENT_REQUEST_CONNECTION } from './constants';
+import { EVENT_MESSAGE, EVENT_REQUEST_CONNECTION, EVENT_JWT_EXPIRE } from './constants';
 
 export class Client {
     private args: ClientArgs;
@@ -110,16 +110,24 @@ export class Client {
 
         // Create connection
         const url = this.serverUrl || "ws://" + this.host + ":" + this.port.toString();
+
         verbose && console.log("Connecting to", url);
+
         const connection: IOClient.Socket = await IOClient.io(url + `?auth=${this.authorizedToken}`);
+
         verbose && console.log("Connected!");
+
         this.socket = connection;
 
         // Register message event
-        this.socket.on("message", (message) => {
+        this.socket.on(EVENT_MESSAGE, (message) => {
             if(this._events[EVENT_MESSAGE]) {
                 this._events[EVENT_MESSAGE](message);
             }
+        });
+
+        this.socket.on(EVENT_JWT_EXPIRE, () => {
+
         });
 
 
@@ -145,17 +153,6 @@ export class Client {
             }
         })
     }
-
-    /*on(event_name: string, callback: Function) {
-        
-        assert(!!this.socket, "Socket object is undefined");
-        if(event_name === EVENT_REQUEST_CONNECTION) return; // cannot override this event, it is reserved
-
-        console.log('CALLED ON', event_name);
-        this._events[event_name] = callback;
-
-        return this.socket?.on(event_name, (args) => callback(args));
-    }*/
 
     send(data: string) {
         this.socket?.send(data);

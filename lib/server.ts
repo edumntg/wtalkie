@@ -6,7 +6,7 @@ import {ServerArgs} from './types';
 import * as http from 'http';
 import express, {Express} from 'express';
 import * as ServerIO from 'socket.io';
-import { EVENT_CONNECTION, EVENT_MESSAGE, EVENT_REQUEST_CONNECTION } from './constants';
+import { EVENT_CONNECTION, EVENT_JWT_EXPIRE, EVENT_MESSAGE, EVENT_REQUEST_CONNECTION } from './constants';
 import assert from 'assert';
 
 dotenv.config();
@@ -17,9 +17,9 @@ export class Server {
     private httpServer: http.Server;
     private host: string;
     private port: number | string;
-    private _events: EventsDict;
     private _serverEvents: EventsDict;
     private _clientEvents: EventsDict;
+    private connectionWaitTime: number;
 
     private pendingConnections: LazyDict;
     private openConnections: LazyDict;
@@ -27,7 +27,7 @@ export class Server {
     constructor(args: ServerArgs) {
         this.host = args.host;
         this.port = args.port;
-        this._events = {};
+        this.connectionWaitTime = args.connectionWaitTime || 5000;
         this._serverEvents = {};
         this._clientEvents = {};
         this.openConnections = {};
@@ -39,7 +39,7 @@ export class Server {
 
     private async __wait_for_socket(socket: WebSocket, waitTime = 0): Promise<boolean> {
         return new Promise((resolve) => {
-            if(waitTime < 5000) {
+            if(waitTime < this.connectionWaitTime) {
                 setTimeout(async () => {
                     if(socket.readyState !== 1) {
                         await this.__wait_for_socket(socket, waitTime + 100);
@@ -171,6 +171,17 @@ export class Server {
             });
 
             socket.on(EVENT_MESSAGE, (message: string) => {
+
+                // Before handling client's message, check if its jwt token is still valid (not expired)
+                const clientKey: string = this.openConnections[socket.id].key;
+                const now = Date.now().valueOf();
+
+                const clientKeyData: LazyDict = jwt.decode(clientKey) as LazyDict;
+                if(now >= clientKeyData.exp * 1000) {
+                    socket.emit(EVENT_JWT_EXPIRE);
+                    return;
+                }
+
                 if(this._clientEvents[EVENT_MESSAGE]) {
                     this._clientEvents[EVENT_MESSAGE](socket, message);
                 }
